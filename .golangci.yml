@@ -1,0 +1,40 @@
+version: "2"
+run:
+  # Timeout for total work, e.g. 30s, 5m, 5m30s.
+  timeout: 5m
+  # Exit code when at least one issue was found.
+  issues-exit-code: 1
+  # Include test files or not.
+  tests: true
+linters:
+  default: standard
+  enable:
+    - errorlint
+    - goconst
+    - gocritic
+    - gocyclo
+    - godot
+    - gosec
+    - misspell
+formatters:
+  # Enable specific formatter.
+  enable:
+    - gofmt
+    - goimports
+  settings:
+    # A list of prefixes, which, if set, checks import paths
+    # with the given prefixes are grouped after 3rd-party packages.
+    goimports:
+      local-prefixes:
+        - github.com/dasvh/st8
+issues:
+  # Apply the fixes detected by the linters and formatters (if it's supported by the linter).
+  fix: true
+# Output configuration options.
+output:
+  formats:
+    text:
+      path: stdout
+      print-linter-name: true
+      print-issued-lines: true
+      colors: true
