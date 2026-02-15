@@ -1,3 +1,19 @@
+// Package st8 gives you a transactional in-memory store with file-backed persistence.
+//
+// It is built for app state where you want simple transactions without pulling in a DB.
+//
+// Guarantees:
+// - Update is atomic for in-process state.
+// - If Update returns an error, in-memory state is unchanged.
+// - Commit happens when st8 atomically replaces the state file.
+//
+// Durability:
+// - st8 syncs directory metadata on supported platforms as best effort.
+// - That best-effort sync does not change commit success or failure.
+//
+// Scope:
+// - st8 coordinates goroutines in one process.
+// - st8 does not coordinate multiple processes writing the same file.
 package st8
 
 import (
@@ -14,8 +30,7 @@ var (
 	ErrInvalidPath   = errors.New("invalid path")
 )
 
-// DB is a generic database structure that holds state and provides
-// thread-safe access and persistence to a file.
+// DB is a transactional in-memory store instance.
 type DB[T any] struct {
 	mu         sync.RWMutex
 	buf        bytes.Buffer
