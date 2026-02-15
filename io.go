@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 )
 
 // persist write the state atomically to disk via a temp file and rename.
@@ -41,8 +42,11 @@ func (db *DB[T]) persist(data T) error {
 		return fmt.Errorf("replace state file: %w", err)
 	}
 
-	if err := syncDir(dir); err != nil {
-		return fmt.Errorf("sync state dir: %w", err)
+	// fsync for dir is not supported on Windows
+	if runtime.GOOS != "windows" {
+		if err := syncDir(dir); err != nil {
+			return fmt.Errorf("sync state dir: %w", err)
+		}
 	}
 
 	return nil
