@@ -1,6 +1,7 @@
 package st8
 
 import (
+	"bytes"
 	"errors"
 	"fmt"
 	"os"
@@ -17,6 +18,7 @@ var (
 // thread-safe access and persistence to a file.
 type DB[T any] struct {
 	mu         sync.RWMutex
+	buf        bytes.Buffer
 	state      T
 	path       string
 	serializer Serializer[T]

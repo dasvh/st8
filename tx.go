@@ -1,9 +1,5 @@
 package st8
 
-import (
-	"bytes"
-)
-
 // View is a read-only "transaction". Uses a read lock to allow multiple concurrent views.
 func (db *DB[T]) View(fn func(s T) error) error {
 	db.mu.RLock()
@@ -18,13 +14,14 @@ func (db *DB[T]) Update(fn func(s *T) error) error {
 	defer db.mu.Unlock()
 
 	var clone T
-	var buf bytes.Buffer
+	db.buf.Reset()
+	defer db.buf.Reset()
 
 	// todo: optimize this by implementing a Clone method on T and using that instead of serialize/deserialize.
-	if err := db.serializer.Serialize(&buf, db.state); err != nil {
+	if err := db.serializer.Serialize(&db.buf, db.state); err != nil {
 		return err
 	}
-	if err := db.serializer.Deserialize(&buf, &clone); err != nil {
+	if err := db.serializer.Deserialize(&db.buf, &clone); err != nil {
 		return err
 	}
 
