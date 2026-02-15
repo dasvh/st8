@@ -134,6 +134,7 @@ func TestPersist(t *testing.T) {
 
 	t.Run("writes_expected_state_on_success", func(t *testing.T) {
 		path := filepath.Join(t.TempDir(), "state.json")
+		dir := filepath.Dir(path)
 		db := &DB[fixtureState]{
 			path:       path,
 			serializer: JSONSerializer[fixtureState]{Indent: "  "},
@@ -147,6 +148,13 @@ func TestPersist(t *testing.T) {
 		}
 		if err := db.persist(want); err != nil {
 			t.Fatalf("persist state: %v", err)
+		}
+		tmpFiles, err := filepath.Glob(filepath.Join(dir, "st8-file*.tmp"))
+		if err != nil {
+			t.Fatalf("glob temp files: %v", err)
+		}
+		if len(tmpFiles) != 0 {
+			t.Fatalf("expected no leftover temp files after successful persist, got %d", len(tmpFiles))
 		}
 
 		reopened, err := Open(path, newFixtureState())

@@ -7,7 +7,7 @@ import (
 	"runtime"
 )
 
-// persist write the state atomically to disk via a temp file and rename.
+// persist writes the state atomically to disk via a temp file and rename.
 func (db *DB[T]) persist(data T) error {
 	if db.path == "" {
 		return ErrInvalidPath
@@ -19,8 +19,12 @@ func (db *DB[T]) persist(data T) error {
 	if err != nil {
 		return fmt.Errorf("create temp file: %w", err)
 	}
+	tmpPath := tmp.Name()
+	cleanupTmp := true
 	defer func() {
-		_ = os.Remove(tmp.Name())
+		if cleanupTmp {
+			_ = os.Remove(tmpPath)
+		}
 	}()
 
 	if err := db.serializer.Serialize(tmp, data); err != nil {
@@ -38,33 +42,30 @@ func (db *DB[T]) persist(data T) error {
 	}
 
 	// todo: handle rename for other os
-	if err := os.Rename(tmp.Name(), db.path); err != nil {
+	if err := os.Rename(tmpPath, db.path); err != nil {
 		return fmt.Errorf("replace state file: %w", err)
 	}
+	cleanupTmp = false
 
-	// fsync for dir is not supported on Windows
+	// fsync for dir is not supported on Windows.
 	if runtime.GOOS != "windows" {
-		if err := syncDir(dir); err != nil {
-			return fmt.Errorf("sync state dir: %w", err)
-		}
+		syncDir(dir)
 	}
 
 	return nil
 }
 
-func syncDir(dir string) error {
+// syncDir performs a best-effort directory fsync.
+// Any failure is intentionally ignored because commit success is determined by rename.
+func syncDir(dir string) {
 	// #nosec G304 -- dir is derived from db.path and only used for fsync
 	d, err := os.Open(dir)
 	if err != nil {
-		return fmt.Errorf("open state dir: %w", err)
+		return
 	}
-
-	if err := d.Sync(); err != nil {
+	defer func() {
 		_ = d.Close()
-		return fmt.Errorf("fsync state dir: %w", err)
-	}
+	}()
 
-	_ = d.Close()
-
-	return nil
+	_ = d.Sync()
 }
