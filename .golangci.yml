@@ -16,6 +16,12 @@ linters:
     - godot
     - gosec
     - misspell
+  exclusions:
+    rules:
+      - path: _test\.go
+        linters:
+          - gocyclo
+          - gosec
 formatters:
   # Enable specific formatter.
   enable:
