@@ -8,37 +8,37 @@ import (
 	"testing"
 )
 
-func TestPersist(t *testing.T) {
+func TestStore_Save(t *testing.T) {
 	t.Run("returns_error_when_path_is_empty", func(t *testing.T) {
-		db := &DB[fixtureState]{
-			serializer: JSONSerializer[fixtureState]{Indent: "  "},
+		store := &store[deepCloneState]{
+			serializer: JSONSerializer[deepCloneState]{Indent: "  "},
 		}
 
-		err := db.persist(newFixtureState())
+		err := store.save(newDeepCloneState())
 		if !errors.Is(err, ErrInvalidPath) {
 			t.Fatalf("expected ErrInvalidPath, got: %v", err)
 		}
 	})
 
 	t.Run("returns_error_when_target_is_unwritable", func(t *testing.T) {
-		db := &DB[fixtureState]{
+		store := &store[deepCloneState]{
 			path:       "/invalid/path/state.json",
-			serializer: JSONSerializer[fixtureState]{Indent: "  "},
+			serializer: JSONSerializer[deepCloneState]{Indent: "  "},
 		}
 
-		if err := db.persist(newFixtureState()); err == nil {
+		if err := store.save(newDeepCloneState()); err == nil {
 			t.Fatalf("expected persist error for invalid path")
 		}
 	})
 
 	t.Run("returns_error_when_parent_dir_does_not_exist", func(t *testing.T) {
 		path := filepath.Join(t.TempDir(), "missing", "state.json")
-		db := &DB[fixtureState]{
+		store := &store[deepCloneState]{
 			path:       path,
-			serializer: JSONSerializer[fixtureState]{Indent: "  "},
+			serializer: JSONSerializer[deepCloneState]{Indent: "  "},
 		}
 
-		err := db.persist(newFixtureState())
+		err := store.save(newDeepCloneState())
 		if err == nil {
 			t.Fatalf("expected error when parent dir does not exist")
 		}
@@ -51,11 +51,11 @@ func TestPersist(t *testing.T) {
 	t.Run("does_not_overwrite_existing_file_when_serialize_fails", func(t *testing.T) {
 		path := filepath.Join(t.TempDir(), "state.json")
 
-		good := &DB[fixtureState]{
+		good := &store[deepCloneState]{
 			path:       path,
-			serializer: JSONSerializer[fixtureState]{Indent: "  "},
+			serializer: JSONSerializer[deepCloneState]{Indent: "  "},
 		}
-		if err := good.persist(fixtureState{
+		if err := good.save(deepCloneState{
 			Revision: 1,
 			Buckets:  map[string]map[string]string{"original": {"k": "v"}},
 		}); err != nil {
@@ -68,14 +68,14 @@ func TestPersist(t *testing.T) {
 		}
 
 		serializeErr := errors.New("boom")
-		fail := &DB[fixtureState]{
+		fail := &store[deepCloneState]{
 			path: path,
-			serializer: failingSerializer[fixtureState]{
+			serializer: failingSerializer[deepCloneState]{
 				err: serializeErr,
 			},
 		}
 
-		err = fail.persist(fixtureState{
+		err = fail.save(deepCloneState{
 			Revision: 2,
 			Buckets:  map[string]map[string]string{"changed": {"x": "y"}},
 		})
@@ -110,11 +110,11 @@ func TestPersist(t *testing.T) {
 			t.Fatalf("create target dir: %v", err)
 		}
 
-		db := &DB[fixtureState]{
+		store := &store[deepCloneState]{
 			path:       targetDir,
-			serializer: JSONSerializer[fixtureState]{Indent: "  "},
+			serializer: JSONSerializer[deepCloneState]{Indent: "  "},
 		}
-		err := db.persist(newFixtureState())
+		err := store.save(newDeepCloneState())
 		if err == nil {
 			t.Fatalf("expected rename error")
 		}
@@ -135,18 +135,18 @@ func TestPersist(t *testing.T) {
 	t.Run("writes_expected_state_on_success", func(t *testing.T) {
 		path := filepath.Join(t.TempDir(), "state.json")
 		dir := filepath.Dir(path)
-		db := &DB[fixtureState]{
+		store := &store[deepCloneState]{
 			path:       path,
-			serializer: JSONSerializer[fixtureState]{Indent: "  "},
+			serializer: JSONSerializer[deepCloneState]{Indent: "  "},
 		}
 
-		want := fixtureState{
+		want := deepCloneState{
 			Revision: 3,
 			Buckets: map[string]map[string]string{
 				"jobs": {"id-1": "done"},
 			},
 		}
-		if err := db.persist(want); err != nil {
+		if err := store.save(want); err != nil {
 			t.Fatalf("persist state: %v", err)
 		}
 		tmpFiles, err := filepath.Glob(filepath.Join(dir, "st8-file*.tmp"))
@@ -157,11 +157,11 @@ func TestPersist(t *testing.T) {
 			t.Fatalf("expected no leftover temp files after successful persist, got %d", len(tmpFiles))
 		}
 
-		reopened, err := Open(path, newFixtureState())
+		reopened, err := Open(path, newDeepCloneState())
 		if err != nil {
 			t.Fatalf("reopen state: %v", err)
 		}
-		if err := reopened.View(func(got fixtureState) error {
+		if err := reopened.View(func(got deepCloneState) error {
 			if got.Revision != want.Revision {
 				t.Fatalf("expected revision %d, got %d", want.Revision, got.Revision)
 			}

@@ -28,6 +28,7 @@ var (
 	ErrNilSerializer = errors.New("nil serializer")
 	ErrNilOption     = errors.New("nil option")
 	ErrInvalidPath   = errors.New("invalid path")
+	ErrNilCloner     = errors.New("nil cloner")
 )
 
 // DB is a transactional in-memory store instance.
@@ -35,8 +36,9 @@ type DB[T any] struct {
 	mu         sync.RWMutex
 	buf        bytes.Buffer
 	state      T
-	path       string
 	serializer Serializer[T]
+	cloner     Cloner[T]
+	store      *store[T]
 }
 
 // Option is a functional option type for configuring the DB.
@@ -45,16 +47,35 @@ type Option[T any] func(*config[T]) error
 // config holds the configuration for the DB.
 type config[T any] struct {
 	Serializer Serializer[T]
+	Cloner     Cloner[T]
 }
 
-// WithSerializer creates an Option to set a custom Serializer for the DB.
-// Returns either a valid Option or an error if the provided Serializer is nil.
+// Cloner lets you provide state cloning for Update.
+// Clone must return an independent copy of src: mutating the result must not affect src.
+type Cloner[T any] interface {
+	Clone(src T) (T, error)
+}
+
+// WithSerializer sets the Serializer used for disk persistence.
+// The returned Option will fail with ErrNilSerializer if serializer is nil.
 func WithSerializer[T any](serializer Serializer[T]) Option[T] {
 	return func(cfg *config[T]) error {
 		if serializer == nil {
 			return ErrNilSerializer
 		}
 		cfg.Serializer = serializer
+		return nil
+	}
+}
+
+// WithCloner sets the Cloner used by Update. If unset, Update clones via Serializer round-trip.
+// The returned Option fails with ErrNilCloner if cloner is nil.
+func WithCloner[T any](cloner Cloner[T]) Option[T] {
+	return func(cfg *config[T]) error {
+		if cloner == nil {
+			return ErrNilCloner
+		}
+		cfg.Cloner = cloner
 		return nil
 	}
 }
@@ -88,26 +109,22 @@ func Open[T any](path string, initial T, opts ...Option[T]) (*DB[T], error) {
 
 	db := &DB[T]{
 		state:      initial,
-		path:       path,
 		serializer: cfg.Serializer,
+		cloner:     cfg.Cloner,
+		store:      newStore(path, cfg.Serializer),
 	}
 
-	// #nosec G304 -- loading caller-provided path is the core behavior of this library
-	f, err := os.Open(path)
-	if err != nil {
-		if os.IsNotExist(err) {
+	var loaded T
+	if err := db.store.load(&loaded); err != nil {
+		if errors.Is(err, os.ErrNotExist) {
 			if err := db.persist(initial); err != nil {
-				return nil, fmt.Errorf("persist initial state %q: %w", path, err)
+				return nil, fmt.Errorf("persist initial state: %w", err)
 			}
 			return db, nil
 		}
-		return nil, fmt.Errorf("open state file %q: %w", path, err)
+		return nil, fmt.Errorf("load state %q: %w", path, err)
 	}
-	defer func() { _ = f.Close() }()
-
-	if err := db.serializer.Deserialize(f, &db.state); err != nil {
-		return nil, fmt.Errorf("deserialize state file %q: %w", path, err)
-	}
+	db.state = loaded
 
 	return db, nil
 }

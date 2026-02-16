@@ -13,15 +13,8 @@ func (db *DB[T]) Update(fn func(s *T) error) error {
 	db.mu.Lock()
 	defer db.mu.Unlock()
 
-	var clone T
-	db.buf.Reset()
-	defer db.buf.Reset()
-
-	// todo: optimize this by implementing a Clone method on T and using that instead of serialize/deserialize.
-	if err := db.serializer.Serialize(&db.buf, db.state); err != nil {
-		return err
-	}
-	if err := db.serializer.Deserialize(&db.buf, &clone); err != nil {
+	clone, err := db.cloneState()
+	if err != nil {
 		return err
 	}
 
@@ -35,4 +28,26 @@ func (db *DB[T]) Update(fn func(s *T) error) error {
 
 	db.state = clone
 	return nil
+}
+
+func (db *DB[T]) cloneState() (T, error) {
+	var clone T
+	if db.cloner != nil {
+		return db.cloner.Clone(db.state)
+	}
+	if db.serializer == nil {
+		return clone, ErrNilSerializer
+	}
+
+	db.buf.Reset()
+
+	// todo: optimize this by implementing a Clone method on T and using that instead of serialize/deserialize.
+	if err := db.serializer.Serialize(&db.buf, db.state); err != nil {
+		return clone, err
+	}
+	if err := db.serializer.Deserialize(&db.buf, &clone); err != nil {
+		return clone, err
+	}
+
+	return clone, nil
 }
