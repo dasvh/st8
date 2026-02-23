@@ -22,6 +22,10 @@ func (db *DB[T]) Update(fn func(s *T) error) error {
 		return err // "rollback"
 	}
 
+	if err := db.validate(clone); err != nil {
+		return err
+	}
+
 	if err := db.persist(clone); err != nil {
 		return err
 	}

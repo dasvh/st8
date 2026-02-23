@@ -19,6 +19,13 @@ It is built for app state where you want simple transactions without pulling in 
 - st8 coordinates goroutines in one process.
 - st8 does not coordinate multiple processes writing the same file.
 
+## Validation
+
+- Use `WithValidator(func(T) error)` to enforce state invariants.
+- `Open` validates loaded state (or initial state before first persist when file is missing).
+- `Update` validates the working copy before persist/commit.
+- Validation errors abort open/commit and leave in-memory state unchanged.
+
 ## License
 
 This project is licensed under the [MIT License](https://github.com/dasvh/st8/raw/main/LICENSE).

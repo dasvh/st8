@@ -93,6 +93,94 @@ func TestUpdate(t *testing.T) {
 		}
 	})
 
+	t.Run("rolls_back_when_validator_fails", func(t *testing.T) {
+		path := filepath.Join(t.TempDir(), "validate-fails.json")
+		errInvalidRev := errors.New("invalid revision")
+
+		validate := func(s deepCloneState) error {
+			if s.Revision < 0 {
+				return errInvalidRev
+			}
+			return nil
+		}
+
+		db, err := Open(
+			path,
+			newDeepCloneState(),
+			WithValidator(validate),
+		)
+		if err != nil {
+			t.Fatalf("open db: %v", err)
+		}
+
+		err = db.Update(func(s *deepCloneState) error {
+			s.Revision = -1
+			return nil
+		})
+		if !errors.Is(err, errInvalidRev) {
+			t.Fatalf("expected validator error, got: %v", err)
+		}
+
+		if err := db.View(func(s deepCloneState) error {
+			if s.Revision != 0 {
+				t.Fatalf("expected rollback to keep revision 0, got %d", s.Revision)
+			}
+			return nil
+		}); err != nil {
+			t.Fatalf("view state: %v", err)
+		}
+
+		reopened, err := Open(path, newDeepCloneState(), WithValidator(validate))
+		if err != nil {
+			t.Fatalf("reopen db: %v", err)
+		}
+		if err := reopened.View(func(s deepCloneState) error {
+			if s.Revision != 0 {
+				t.Fatalf("expected persisted rollback to keep revision 0, got %d", s.Revision)
+			}
+			return nil
+		}); err != nil {
+			t.Fatalf("view reopened state: %v", err)
+		}
+	})
+
+	t.Run("validator_allows_commit_when_state_is_valid", func(t *testing.T) {
+		path := filepath.Join(t.TempDir(), "validate-fails.json")
+		errInvalidRev := errors.New("invalid revision")
+
+		validate := func(s deepCloneState) error {
+			if s.Revision < 0 {
+				return errInvalidRev
+			}
+			return nil
+		}
+
+		db, err := Open(
+			path,
+			newDeepCloneState(),
+			WithValidator(validate),
+		)
+		if err != nil {
+			t.Fatalf("open db: %v", err)
+		}
+
+		if err := db.Update(func(s *deepCloneState) error {
+			s.Revision = 6
+			return nil
+		}); err != nil {
+			t.Fatalf("update state: %v", err)
+		}
+
+		if err := db.View(func(s deepCloneState) error {
+			if s.Revision != 6 {
+				t.Fatalf("expected revision 6, got %d", s.Revision)
+			}
+			return nil
+		}); err != nil {
+			t.Fatalf("view state: %v", err)
+		}
+	})
+
 	t.Run("keeps_nested_state_isolated_on_rollback_for_all_clone_paths", func(t *testing.T) {
 		cases := []struct {
 			name string

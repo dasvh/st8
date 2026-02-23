@@ -43,6 +43,57 @@ func TestOpen(t *testing.T) {
 		}
 	})
 
+	t.Run("returns_error_when_validator_option_is_nil", func(t *testing.T) {
+		path := filepath.Join(t.TempDir(), "state.json")
+		_, err := Open(path, newDeepCloneState(), WithValidator[deepCloneState](nil))
+		if !errors.Is(err, ErrNilValidator) {
+			t.Fatalf("expected ErrNilValidator, got: %v", err)
+		}
+	})
+
+	t.Run("returns_error_when_initial_state_validation_fails", func(t *testing.T) {
+		path := filepath.Join(t.TempDir(), "state.json")
+		wantErr := errors.New("initial state invalid")
+
+		_, err := Open(path, newDeepCloneState(), WithValidator(func(s deepCloneState) error {
+			return wantErr
+		}))
+		if !errors.Is(err, wantErr) {
+			t.Fatalf("expected wrapped validator error, got: %v", err)
+		}
+
+		_, statErr := os.Stat(path)
+		if !errors.Is(statErr, os.ErrNotExist) {
+			t.Fatalf("expected no state file to be persisted, stat err: %v", statErr)
+		}
+	})
+
+	t.Run("returns_error_when_loaded_state_validation_fails", func(t *testing.T) {
+		path := filepath.Join(t.TempDir(), "state.json")
+
+		seeded, err := Open(path, newDeepCloneState())
+		if err != nil {
+			t.Fatalf("open seed db: %v", err)
+		}
+		if err := seeded.Update(func(s *deepCloneState) error {
+			s.Revision = -1
+			return nil
+		}); err != nil {
+			t.Fatalf("seed invalid persisted state: %v", err)
+		}
+
+		wantErr := errors.New("loaded state invalid")
+		_, err = Open(path, newDeepCloneState(), WithValidator(func(s deepCloneState) error {
+			if s.Revision < 0 {
+				return wantErr
+			}
+			return nil
+		}))
+		if !errors.Is(err, wantErr) {
+			t.Fatalf("expected wrapped validator error, got: %v", err)
+		}
+	})
+
 	t.Run("persists_committed_state_across_reopen", func(t *testing.T) {
 		path := filepath.Join(t.TempDir(), "persist.json")
 

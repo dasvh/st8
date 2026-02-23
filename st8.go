@@ -29,6 +29,7 @@ var (
 	ErrNilOption     = errors.New("nil option")
 	ErrInvalidPath   = errors.New("invalid path")
 	ErrNilCloner     = errors.New("nil cloner")
+	ErrNilValidator  = errors.New("nil validator")
 )
 
 // DB is a transactional in-memory store instance.
@@ -39,6 +40,7 @@ type DB[T any] struct {
 	serializer Serializer[T]
 	cloner     Cloner[T]
 	store      *store[T]
+	validator  func(T) error
 }
 
 // Option is a functional option type for configuring the DB.
@@ -48,6 +50,7 @@ type Option[T any] func(*config[T]) error
 type config[T any] struct {
 	Serializer Serializer[T]
 	Cloner     Cloner[T]
+	Validator  func(T) error
 }
 
 // Cloner lets you provide state cloning for Update.
@@ -80,7 +83,20 @@ func WithCloner[T any](cloner Cloner[T]) Option[T] {
 	}
 }
 
-// Open initializes a new DB instance with the given path, initial state, and the provided options.
+// WithValidator sets a state validator used by [Open] and [DB.Update].
+// Validation failures abort open/commit and leave in-memory state unchanged.
+// The returned [Option] fails with [ErrNilValidator] if fn is nil.
+func WithValidator[T any](fn func(T) error) Option[T] {
+	return func(cfg *config[T]) error {
+		if fn == nil {
+			return ErrNilValidator
+		}
+		cfg.Validator = fn
+		return nil
+	}
+}
+
+// Open initializes a new [DB] instance with the given path, initial state, and the provided options.
 func Open[T any](path string, initial T, opts ...Option[T]) (*DB[T], error) {
 	if path == "" {
 		return nil, ErrInvalidPath
@@ -112,11 +128,15 @@ func Open[T any](path string, initial T, opts ...Option[T]) (*DB[T], error) {
 		serializer: cfg.Serializer,
 		cloner:     cfg.Cloner,
 		store:      newStore(path, cfg.Serializer),
+		validator:  cfg.Validator,
 	}
 
 	var loaded T
 	if err := db.store.load(&loaded); err != nil {
 		if errors.Is(err, os.ErrNotExist) {
+			if err := db.validate(initial); err != nil {
+				return nil, fmt.Errorf("validate initial state: %w", err)
+			}
 			if err := db.persist(initial); err != nil {
 				return nil, fmt.Errorf("persist initial state: %w", err)
 			}
@@ -124,7 +144,18 @@ func Open[T any](path string, initial T, opts ...Option[T]) (*DB[T], error) {
 		}
 		return nil, fmt.Errorf("load state %q: %w", path, err)
 	}
-	db.state = loaded
 
+	if err := db.validate(loaded); err != nil {
+		return nil, fmt.Errorf("validate loaded state: %w", err)
+	}
+
+	db.state = loaded
 	return db, nil
+}
+
+func (db *DB[T]) validate(s T) error {
+	if db.validator == nil {
+		return nil
+	}
+	return db.validator(s)
 }
