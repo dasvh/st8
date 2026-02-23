@@ -1,19 +1,20 @@
 // Package st8 gives you a transactional in-memory store with file-backed persistence.
 //
-// It is built for app state where you want simple transactions without pulling in a DB.
+// It is built for application state where you want simple transactions without pulling in a database.
 //
 // Guarantees:
-// - Update is atomic for in-process state.
-// - If Update returns an error, in-memory state is unchanged.
-// - Commit happens when st8 atomically replaces the state file.
+//   - [DB.Update] is atomic for in-process state.
+//   - If [DB.Update] returns an error, in-memory state is unchanged.
+//   - Commit happens when st8 atomically replaces the state file.
+//   - If [WithValidator] is configured, [Open] and [DB.Update] validate state before use/commit.
 //
 // Durability:
-// - st8 syncs directory metadata on supported platforms as best effort.
-// - That best-effort sync does not change commit success or failure.
+//   - st8 syncs directory metadata on supported platforms as best effort.
+//   - That best-effort sync does not change commit success or failure.
 //
 // Scope:
-// - st8 coordinates goroutines in one process.
-// - st8 does not coordinate multiple processes writing the same file.
+//   - st8 coordinates goroutines in one process.
+//   - st8 does not coordinate multiple processes writing the same file.
 package st8
 
 import (
@@ -46,21 +47,21 @@ type DB[T any] struct {
 // Option is a functional option type for configuring the DB.
 type Option[T any] func(*config[T]) error
 
-// config holds the configuration for the DB.
+// config holds the configuration for the [DB].
 type config[T any] struct {
 	Serializer Serializer[T]
 	Cloner     Cloner[T]
 	Validator  func(T) error
 }
 
-// Cloner lets you provide state cloning for Update.
+// Cloner lets you provide state cloning for [DB.Update].
 // Clone must return an independent copy of src: mutating the result must not affect src.
 type Cloner[T any] interface {
 	Clone(src T) (T, error)
 }
 
-// WithSerializer sets the Serializer used for disk persistence.
-// The returned Option will fail with ErrNilSerializer if serializer is nil.
+// WithSerializer sets the [Serializer] used for disk persistence.
+// The returned [Option] will fail with [ErrNilSerializer] if serializer is nil.
 func WithSerializer[T any](serializer Serializer[T]) Option[T] {
 	return func(cfg *config[T]) error {
 		if serializer == nil {
@@ -71,8 +72,8 @@ func WithSerializer[T any](serializer Serializer[T]) Option[T] {
 	}
 }
 
-// WithCloner sets the Cloner used by Update. If unset, Update clones via Serializer round-trip.
-// The returned Option fails with ErrNilCloner if cloner is nil.
+// WithCloner sets the [Cloner] used by Update. If unset, [DB.Update] clones via [Serializer] round-trip.
+// The returned [Option] fails with [ErrNilCloner] if cloner is nil.
 func WithCloner[T any](cloner Cloner[T]) Option[T] {
 	return func(cfg *config[T]) error {
 		if cloner == nil {

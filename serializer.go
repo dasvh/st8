@@ -26,7 +26,7 @@ type Serializer[T any] interface {
 	Deserialize(r io.Reader, data *T) error
 }
 
-// JSONSerializer is the default Serializer implementation.
+// JSONSerializer is the default [Serializer] implementation.
 type JSONSerializer[T any] struct {
 	Indent                string
 	DisallowUnknownFields bool
